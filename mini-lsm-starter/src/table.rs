@@ -7,9 +7,9 @@ mod iterator;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 pub use builder::SsTableBuilder;
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes};
 pub use iterator::SsTableIterator;
 
 use crate::block::Block;
@@ -30,12 +30,26 @@ impl BlockMeta {
         #[allow(clippy::ptr_arg)] // remove this allow after you finish
         buf: &mut Vec<u8>,
     ) {
-        unimplemented!()
+        // write block_meta to buf
+        for meta in block_meta {
+            buf.put_u64(meta.offset as u64);
+            buf.put_u64(meta.first_key.len() as u64);
+            buf.put_slice(&meta.first_key);
+        }
     }
 
     /// Decode block meta from a buffer.
     pub fn decode_block_meta(buf: impl Buf) -> Vec<BlockMeta> {
-        unimplemented!()
+        // read block_meta from buf
+        let mut block_meta = vec![];
+        let mut buf = buf;
+        while buf.has_remaining() {
+            let offset = buf.get_u64() as usize;
+            let first_key_len = buf.get_u64() as usize;
+            let first_key = buf.copy_to_bytes(first_key_len);
+            block_meta.push(BlockMeta { offset, first_key });
+        }
+        block_meta
     }
 }
 
@@ -53,7 +67,17 @@ impl FileObject {
 
     /// Create a new file object (day 2) and write the file to the disk (day 4).
     pub fn create(path: &Path, data: Vec<u8>) -> Result<Self> {
-        unimplemented!()
+        // Create a new file for path
+        // let file = match fs::File::create(path) {
+        //     Ok(file) => file,
+        //     Err(e) => return Err(e.into()),
+        // };
+        // Write data to file
+        // match file.write_all_at(&data, 0) {
+        //     Ok(_) => Ok(FileObject(Bytes::new())),
+        //     Err(e) => Err(e.into()),
+        // }
+        Ok(Self(data.into()))
     }
 
     pub fn open(path: &Path) -> Result<Self> {
@@ -75,7 +99,19 @@ impl SsTable {
 
     /// Open SSTable from a file.
     pub fn open(id: usize, block_cache: Option<Arc<BlockCache>>, file: FileObject) -> Result<Self> {
-        unimplemented!()
+        // read from FileObject
+        let block_meta_offset = file.read(file.size() - 8, 8)?;
+        // convert block_meta_offset into u64
+        let block_meta_offset = bytes::Buf::get_u64(&mut block_meta_offset.as_slice());
+        // read block_meta from file
+        let block_meta = file.read(block_meta_offset, file.size() - 8 - block_meta_offset)?;
+        // decode block_meta
+        let block_meta = BlockMeta::decode_block_meta(block_meta.as_slice());
+        Ok(Self {
+            file,
+            block_metas: block_meta,
+            block_meta_offset: block_meta_offset as usize,
+        })
     }
 
     /// Read a block from the disk.
