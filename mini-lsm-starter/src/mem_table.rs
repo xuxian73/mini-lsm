@@ -20,7 +20,7 @@ pub struct MemTable {
 impl MemTable {
     /// Create a new mem-table.
     pub fn create() -> Self {
-        unimplemented!()
+        MemTable { map: SkipMap::new() }
     }
 
     /// Get a value by key.
