@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::Block;
 
 /// Iterates on a block.
+#[derive(Debug)]
 pub struct BlockIterator {
     block: Arc<Block>,
     key: Vec<u8>,

@@ -54,6 +54,7 @@ impl BlockMeta {
 }
 
 /// A file object.
+#[derive(Debug)]
 pub struct FileObject(Bytes);
 
 impl FileObject {
@@ -85,6 +86,7 @@ impl FileObject {
     }
 }
 
+#[derive(Debug)]
 pub struct SsTable {
     file: FileObject,
     block_metas: Vec<BlockMeta>,
@@ -116,7 +118,16 @@ impl SsTable {
 
     /// Read a block from the disk.
     pub fn read_block(&self, block_idx: usize) -> Result<Arc<Block>> {
-        unimplemented!()
+        if block_idx >= self.block_metas.len() {
+            return Err(anyhow::anyhow!("block_idx out of range"));
+        }
+        let offset = self.block_metas[block_idx].offset as u64;
+        let end = match self.block_metas.len() > block_idx + 1 {
+            true => self.block_metas[block_idx + 1].offset,
+            false => self.block_meta_offset,
+        } as u64;
+        let block_data = self.file.read(offset, end - offset)?;
+        Ok(Arc::new(Block::decode(block_data.as_slice())))
     }
 
     /// Read a block from disk, with block cache. (Day 4)
@@ -126,12 +137,14 @@ impl SsTable {
 
     /// Find the block that may contain `key`.
     pub fn find_block_idx(&self, key: &[u8]) -> usize {
-        unimplemented!()
+        self.block_metas
+            .partition_point(|meta| meta.first_key < key)
+            .saturating_sub(1)
     }
 
     /// Get number of data blocks.
     pub fn num_of_blocks(&self) -> usize {
-        unimplemented!()
+        self.block_metas.len()
     }
 }
 

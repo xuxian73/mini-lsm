@@ -39,7 +39,7 @@ impl SsTableBuilder {
         self.meta.push(BlockMeta {
             offset,
             first_key: Bytes::copy_from_slice(
-                BlockIterator::create_and_seek_to_first(Arc::new(block)).value(),
+                BlockIterator::create_and_seek_to_first(Arc::new(block)).key(),
             ),
         });
         self.block_builder = Some(Box::new(BlockBuilder::new(self.block_size)));
