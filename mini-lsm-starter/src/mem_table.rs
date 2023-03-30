@@ -1,6 +1,3 @@
-#![allow(unused_variables)] // TODO(you): remove this lint after implementing this mod
-#![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
-
 use std::ops::Bound;
 use std::sync::Arc;
 
@@ -14,33 +11,67 @@ use crate::table::SsTableBuilder;
 
 /// A basic mem-table based on crossbeam-skiplist
 pub struct MemTable {
-    map: SkipMap<Bytes, Bytes>,
+    map: Arc<SkipMap<Bytes, Bytes>>,
 }
 
 impl MemTable {
     /// Create a new mem-table.
     pub fn create() -> Self {
-        MemTable { map: SkipMap::new() }
+        MemTable {
+            map: Arc::new(SkipMap::new()),
+        }
     }
 
     /// Get a value by key.
     pub fn get(&self, key: &[u8]) -> Option<Bytes> {
-        unimplemented!()
+        let kv = self.map.get(&Bytes::copy_from_slice(key));
+        match kv.is_none() {
+            true => None,
+            false => Some(kv.unwrap().value().clone()),
+        }
     }
 
     /// Put a key-value pair into the mem-table.
     pub fn put(&self, key: &[u8], value: &[u8]) {
-        unimplemented!()
+        self.map
+            .insert(Bytes::copy_from_slice(key), Bytes::copy_from_slice(value));
+    }
+
+    /// turn a &[u8] bound into a Bytes bound
+    fn bound_to_bytes(bound: Bound<&[u8]>) -> Bound<Bytes> {
+        match bound {
+            Bound::Included(k) => Bound::Included(Bytes::copy_from_slice(k)),
+            Bound::Excluded(k) => Bound::Excluded(Bytes::copy_from_slice(k)),
+            Bound::Unbounded => Bound::Unbounded,
+        }
     }
 
     /// Get an iterator over a range of keys.
     pub fn scan(&self, lower: Bound<&[u8]>, upper: Bound<&[u8]>) -> MemTableIterator {
-        unimplemented!()
+        let lower = MemTable::bound_to_bytes(lower);
+        let upper = MemTable::bound_to_bytes(upper);
+        let mut iter = MemTableIteratorBuilder {
+            map: Arc::clone(&self.map),
+            iter_builder: |map| map.range((lower, upper)),
+            item: (Bytes::from_static(&[]), Bytes::from_static(&[])),
+        }
+        .build();
+        // get the first item of the iterator
+        let entry = iter.with_iter_mut(|iter| {
+            iter.next()
+                .map(|x| (x.key().clone(), x.value().clone()))
+                .unwrap_or_else(|| (Bytes::from_static(&[]), Bytes::from_static(&[])))
+        });
+        iter.with_mut(|x| *x.item = entry);
+        iter
     }
 
     /// Flush the mem-table to SSTable.
     pub fn flush(&self, builder: &mut SsTableBuilder) -> Result<()> {
-        unimplemented!()
+        for entry in self.map.iter() {
+            builder.add(entry.key(), entry.value());
+        }
+        Ok(())
     }
 }
 
@@ -59,19 +90,25 @@ pub struct MemTableIterator {
 
 impl StorageIterator for MemTableIterator {
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        self.borrow_item().1.as_ref()
     }
 
     fn key(&self) -> &[u8] {
-        unimplemented!()
+        self.borrow_item().0.as_ref()
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        !self.borrow_item().0.is_empty()
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        let entry = self.with_iter_mut(|iter| {
+            iter.next()
+                .map(|x| (x.key().clone(), x.value().clone()))
+                .unwrap_or_else(|| (Bytes::from_static(&[]), Bytes::from_static(&[])))
+        });
+        self.with_mut(|x| *x.item = entry);
+        Ok(())
     }
 }
 
