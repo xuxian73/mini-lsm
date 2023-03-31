@@ -1,6 +1,3 @@
-#![allow(unused_variables)] // TODO(you): remove this lint after implementing this mod
-#![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
-
 use std::cmp::{self};
 use std::collections::BinaryHeap;
 
@@ -20,6 +17,12 @@ impl<I: StorageIterator> Eq for HeapWrapper<I> {}
 
 impl<I: StorageIterator> PartialOrd for HeapWrapper<I> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        if !self.1.is_valid() {
+            return Some(cmp::Ordering::Less);
+        }
+        if !other.1.is_valid() {
+            return Some(cmp::Ordering::Greater);
+        }
         match self.1.key().cmp(other.1.key()) {
             cmp::Ordering::Greater => Some(cmp::Ordering::Greater),
             cmp::Ordering::Less => Some(cmp::Ordering::Less),
@@ -39,29 +42,72 @@ impl<I: StorageIterator> Ord for HeapWrapper<I> {
 /// iterators, perfer the one with smaller index.
 pub struct MergeIterator<I: StorageIterator> {
     iters: BinaryHeap<HeapWrapper<I>>,
-    current: HeapWrapper<I>,
+    current: Option<HeapWrapper<I>>,
 }
 
 impl<I: StorageIterator> MergeIterator<I> {
     pub fn create(iters: Vec<Box<I>>) -> Self {
-        unimplemented!()
+        if iters.is_empty() {
+            return Self {
+                iters: BinaryHeap::new(),
+                current: None,
+            };
+        }
+        let mut heap = BinaryHeap::new();
+        for (i, iter) in iters.into_iter().enumerate() {
+            heap.push(HeapWrapper(i, iter));
+        }
+        let current = heap.pop();
+        Self {
+            iters: heap,
+            current,
+        }
     }
 }
 
 impl<I: StorageIterator> StorageIterator for MergeIterator<I> {
     fn key(&self) -> &[u8] {
-        unimplemented!()
+        self.current.as_ref().unwrap().1.key()
     }
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        self.current.as_ref().unwrap().1.value()
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        self.current
+            .as_ref()
+            .map(|x| x.1.is_valid())
+            .unwrap_or(false)
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        if !self.current.as_ref().unwrap().1.is_valid() {
+            return Ok(());
+        }
+        while let Some(mut iter) = self.iters.peek_mut() {
+            if !iter.1.is_valid() {
+                if self.current.as_mut().unwrap().1.next().is_err() {}
+                return Ok(());
+            }
+            if iter.1.key() <= self.current.as_ref().unwrap().1.key() {
+                if iter.1.next().is_err() {}
+            } else {
+                break;
+            }
+        }
+        if self.current.as_mut().unwrap().1.next().is_err() {
+            while !self.current.as_ref().unwrap().1.is_valid() && !self.iters.is_empty() {
+                self.current = self.iters.pop();
+            }
+        }
+
+        if !self.iters.is_empty() && self.current.as_ref().unwrap() < self.iters.peek().unwrap() {
+            std::mem::swap(
+                self.current.as_mut().unwrap(),
+                &mut *self.iters.peek_mut().unwrap(),
+            );
+        }
+        Ok(())
     }
 }

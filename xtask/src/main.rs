@@ -80,7 +80,7 @@ fn check() -> Result<()> {
 }
 
 fn test() -> Result<()> {
-    println!("{}", style("cargo nextest run").bold());
+    println!("{}", style("cargo nextest run --nocapture").bold());
     cmd!("cargo", "nextest", "run").run()?;
     Ok(())
 }
